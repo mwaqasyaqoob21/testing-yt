@@ -119,6 +119,7 @@ if st.button("Fetch Data"):
                         "Related Keywords": related_keywords,
                     })
 
+
         # Display results
         if all_results:
             st.success(f"Found {len(all_results)} results across all keywords!")
