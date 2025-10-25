@@ -82,22 +82,25 @@ if st.button("Fetch Data"):
                         views = int(stat["statistics"].get("viewCount", 0))
                         subs = int(channel["statistics"].get("subscriberCount", 0))
 
+                        # Handle missing channel title and category
+                        channel_name = channel["snippet"].get("channelTitle", "N/A")
+                        country = channel["snippet"].get("country", "N/A")  # Country (if available)
+                        channel_category = channel["snippet"].get("categoryId", "N/A")  # Niche/Category
+
                         # Calculate virality: views to subscribers ratio
                         virality_index = views / (subs if subs != 0 else 1)
 
                         # Apply filters for channels with specified subscriber count and viral videos
                         if min_subs <= subs <= max_subs and virality_index > 1:  # Assuming virality index greater than 1 is "viral"
                             channel_age = (datetime.utcnow() - datetime.strptime(channel["snippet"]["publishedAt"], "%Y-%m-%dT%H:%M:%SZ")).days
-                            country = channel["snippet"].get("country", "N/A")  # Country (if available)
-                            niche = channel["snippet"].get("categoryId", "N/A")  # Niche (categoryId)
 
                             all_results.append({
-                                "Channel Name": channel["snippet"]["channelTitle"],
+                                "Channel Name": channel_name,
                                 "Channel URL": f"https://www.youtube.com/channel/{channel['id']}",
                                 "Subscribers": subs,
                                 "Age (Days)": channel_age,
                                 "Country": country,
-                                "Niche": niche,
+                                "Niche": channel_category,
                                 "Top Video": title,
                                 "Video URL": video_url,
                                 "Views": views,
