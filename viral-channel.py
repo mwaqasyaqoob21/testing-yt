@@ -60,28 +60,27 @@ if st.button("Fetch Data"):
                 # Check if we have valid statistics and channels data
                 if "items" not in stats_data or not stats_data["items"] or "items" not in channel_data or not channel_data["items"]:
                     st.warning("Failed to fetch video or channel statistics.")
-                    return
+                else:
+                    stats = stats_data["items"]
+                    channels = channel_data["items"]
 
-                stats = stats_data["items"]
-                channels = channel_data["items"]
+                    # Process and filter results for videos
+                    for video, stat, channel in zip(data["items"], stats, channels):
+                        title = video["snippet"].get("title", "N/A")
+                        description = video["snippet"].get("description", "")[:200]  # Limit description to 200 chars
+                        video_url = f"https://www.youtube.com/watch?v={video['id']['videoId']}"
+                        views = int(stat["statistics"].get("viewCount", 0))
+                        subs = int(channel["statistics"].get("subscriberCount", 0))
 
-                # Process and filter results for videos
-                for video, stat, channel in zip(data["items"], stats, channels):
-                    title = video["snippet"].get("title", "N/A")
-                    description = video["snippet"].get("description", "")[:200]  # Limit description to 200 chars
-                    video_url = f"https://www.youtube.com/watch?v={video['id']['videoId']}"
-                    views = int(stat["statistics"].get("viewCount", 0))
-                    subs = int(channel["statistics"].get("subscriberCount", 0))
-
-                    # Filter channels with 1k-5k subscribers
-                    if 1000 <= subs <= 5000:
-                        all_results.append({
-                            "Title": title,
-                            "Description": description,
-                            "URL": video_url,
-                            "Views": views,
-                            "Subscribers": subs,
-                        })
+                        # Filter channels with 1k-5k subscribers
+                        if 1000 <= subs <= 5000:
+                            all_results.append({
+                                "Title": title,
+                                "Description": description,
+                                "URL": video_url,
+                                "Views": views,
+                                "Subscribers": subs,
+                            })
 
             # Display results
             if all_results:
