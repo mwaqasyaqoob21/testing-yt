@@ -9,10 +9,10 @@ YOUTUBE_VIDEO_URL = "https://www.googleapis.com/youtube/v3/videos"
 YOUTUBE_CHANNEL_URL = "https://www.googleapis.com/youtube/v3/channels"
 
 # Streamlit App Title
-st.title("YouTube Research Tool")
+st.title("YouTube Viral Topics & Channels Research Tool")
 
 # Input Fields
-keywords_input = st.text_input("Enter Keywords (comma separated):", "Affair Relationship Stories, Reddit Relationship Advice")
+keywords_input = st.text_input("Enter Keywords (comma separated):", "Relationship Advice, Cheating Stories")
 days = st.number_input("Enter Days to Search (1-30):", min_value=1, max_value=30, value=5)
 min_subscribers = st.number_input("Minimum Subscribers:", min_value=0, max_value=50000, value=1000)
 max_subscribers = st.number_input("Maximum Subscribers:", min_value=0, max_value=50000, value=5000)
@@ -50,7 +50,7 @@ if st.button("Fetch Data"):
                 "order": "viewCount",
                 "publishedAfter": start_date_str,
                 "publishedBefore": end_date_str,
-                "maxResults": 5,
+                "maxResults": 15,
                 "key": API_KEY,
             }
 
