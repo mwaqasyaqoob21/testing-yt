@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 import re
 from collections import Counter
-import isodate  # For parsing YouTube duration format
 
 # YouTube API Configuration
 API_KEY = "AIzaSyAMSPSOQaPGAia_SxtMzcsL72w-cuSgh9U"
@@ -26,14 +25,28 @@ st.title("🔍 YouTube Channel Research Tool")
 st.markdown("**Discover new YouTube channels based on your custom criteria**")
 
 # ============================================
-# DURATION PARSING FUNCTIONS
+# DURATION PARSING FUNCTIONS (NO EXTERNAL LIBRARY)
 # ============================================
 
 def parse_duration(duration_str):
-    """Parse ISO 8601 duration format to seconds"""
+    """
+    Parse ISO 8601 duration format to seconds
+    Examples: PT15S = 15 seconds, PT2M30S = 150 seconds, PT1H5M = 3900 seconds
+    """
     try:
-        duration = isodate.parse_duration(duration_str)
-        return int(duration.total_seconds())
+        # Pattern to extract hours, minutes, seconds
+        pattern = r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?'
+        match = re.match(pattern, duration_str)
+        
+        if not match:
+            return 0
+        
+        hours = int(match.group(1)) if match.group(1) else 0
+        minutes = int(match.group(2)) if match.group(2) else 0
+        seconds = int(match.group(3)) if match.group(3) else 0
+        
+        total_seconds = hours * 3600 + minutes * 60 + seconds
+        return total_seconds
     except:
         return 0
 
@@ -44,15 +57,17 @@ def format_duration(seconds):
     elif seconds < 3600:
         minutes = seconds // 60
         secs = seconds % 60
-        return f"{minutes}m {secs}s"
+        return f"{minutes}m {secs}s" if secs > 0 else f"{minutes}m"
     else:
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
-        return f"{hours}h {minutes}m"
+        if minutes > 0:
+            return f"{hours}h {minutes}m"
+        return f"{hours}h"
 
 def is_short_video(duration_seconds):
     """Determine if video is a YouTube Short (<=60 seconds)"""
-    return duration_seconds <= 60
+    return duration_seconds > 0 and duration_seconds <= 60
 
 # ============================================
 # SIMILARITY DETECTION FUNCTIONS
@@ -585,7 +600,8 @@ if st.session_state.search_completed and st.session_state.search_results:
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("Total Views", f"{sum([r['views'] for r in regular_videos]):,}")
             col2.metric("Avg Views/Video", f"{int(sum([r['views'] for r in regular_videos])/len(regular_videos)):,}")
-            col3.metric("Avg Duration", format_duration(int(sum([r['duration_seconds'] for r in regular_videos])/len(regular_videos))))
+            avg_duration = int(sum([r['duration_seconds'] for r in regular_videos])/len(regular_videos))
+            col3.metric("Avg Duration", format_duration(avg_duration))
             col4.metric("Unique Channels", len(set([r['channel_name'] for r in regular_videos])))
             
             # Sort options for regular videos
