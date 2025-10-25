@@ -17,27 +17,39 @@ days = st.number_input("Enter Days to Search (1-30):", min_value=1, max_value=30
 min_subscribers = st.number_input("Minimum Subscribers:", min_value=0, max_value=50000, value=1000)
 max_subscribers = st.number_input("Maximum Subscribers:", min_value=0, max_value=50000, value=5000)
 
+# Add a filter for month and year
+year = st.selectbox("Select Year", list(range(2000, datetime.utcnow().year + 1)))
+month = st.selectbox("Select Month", list(range(1, 13)))
+
+# Calculate start and end date for the selected month/year
+if year and month:
+    start_date = datetime(year, month, 1)
+    end_date = datetime(year, month + 1, 1) - timedelta(days=1) if month != 12 else datetime(year + 1, 1, 1) - timedelta(days=1)
+
 # Parse the keywords
 keywords = [keyword.strip() for keyword in keywords_input.split(",")]
 
 # Fetch Data Button
 if st.button("Fetch Data"):
     try:
-        # Calculate date range
-        start_date = (datetime.utcnow() - timedelta(days=int(days))).isoformat("T") + "Z"
+        # Convert start_date and end_date to ISO format for YouTube API
+        start_date_str = start_date.isoformat("T") + "Z"
+        end_date_str = end_date.isoformat("T") + "Z"
+        
         all_results = []
 
         # Iterate over the list of keywords
         for keyword in keywords:
             st.write(f"Searching for keyword: {keyword}")
 
-            # Define search parameters
+            # Define search parameters with date range
             search_params = {
                 "part": "snippet",
                 "q": keyword,
                 "type": "video",
                 "order": "viewCount",
-                "publishedAfter": start_date,
+                "publishedAfter": start_date_str,
+                "publishedBefore": end_date_str,
                 "maxResults": 5,
                 "key": API_KEY,
             }
