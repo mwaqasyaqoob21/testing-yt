@@ -12,21 +12,19 @@ YOUTUBE_CHANNEL_URL = "https://www.googleapis.com/youtube/v3/channels"
 st.title("YouTube Channel Discovery Tool")
 
 # Input Fields
-days = st.number_input("Enter Days to Search (1-30):", min_value=1, max_value=30, value=7)
-min_subs = st.number_input("Enter Minimum Subscriber Count:", min_value=0, max_value=100000, value=1000)
-max_subs = st.number_input("Enter Maximum Subscriber Count:", min_value=0, max_value=100000, value=5000)
+topic = st.text_input("Enter a topic to search channels:", "")
 
-# Country list for dropdown (example, can be expanded as needed)
-countries = ['India', 'United States', 'United Kingdom', 'Australia', 'Canada', 'Germany', 'Japan', 'Brazil']
-selected_country = st.selectbox("Select a Country", countries)
+# Subscriber range inputs
+min_subs = st.number_input("Enter Minimum Subscriber Count:", min_value=0, max_value=1000000, value=0)
+max_subs = st.number_input("Enter Maximum Subscriber Count:", min_value=0, max_value=1000000, value=5000)
 
 # Time Period Dropdown (7 days, 14 days, 28 days)
 time_period = st.selectbox("Select Time Period", ["7 Days", "14 Days", "28 Days"])
 
 # Fetch Data Button
 if st.button("Fetch Data"):
-    if not selected_country:
-        st.warning("Please select a country and provide a topic to search.")
+    if not topic:
+        st.warning("Please enter a topic to search.")
     else:
         try:
             # Set date range based on selected time period
@@ -42,19 +40,19 @@ if st.button("Fetch Data"):
             # Define search parameters for videos based on the topic
             search_params = {
                 "part": "snippet",
-                "q": selected_country,  # Search for videos related to the selected country
+                "q": topic,  # Search for videos related to the selected topic
                 "type": "video",
                 "publishedAfter": start_date,  # Filter by the selected time period
                 "maxResults": 10,  # Get up to 10 videos
                 "key": API_KEY,
             }
 
-            # Fetch video data based on country and time period
+            # Fetch video data based on topic
             response = requests.get(YOUTUBE_SEARCH_URL, params=search_params)
             data = response.json()
 
             if "items" not in data or not data["items"]:
-                st.warning(f"No videos found for country: {selected_country} in the last {time_period}.")
+                st.warning(f"No videos found for topic: {topic}.")
             else:
                 video_ids = [video["id"]["videoId"] for video in data["items"]]
                 channel_ids = [video["snippet"]["channelId"] for video in data["items"]]
@@ -83,34 +81,38 @@ if st.button("Fetch Data"):
                         video_url = f"https://www.youtube.com/watch?v={video['id']['videoId']}"
                         views = int(stat["statistics"].get("viewCount", 0))
                         subs = int(channel["statistics"].get("subscriberCount", 0))
-                        country = channel["snippet"].get("country", "N/A")  # Country (if available)
-                        channel_category = channel["snippet"].get("categoryId", "N/A")  # Niche/Category
-                        
-                        # Channel creation date and age
-                        creation_date = channel["snippet"].get("publishedAt", "1970-01-01T00:00:00Z")
-                        creation_date = datetime.strptime(creation_date, "%Y-%m-%dT%H:%M:%SZ")
-                        channel_age = (datetime.utcnow() - creation_date).days
 
-                        # Apply filters for channels with 1k-5k subscribers
-                        if min_subs <= subs <= max_subs:
+                        # Calculate virality: views to subscribers ratio
+                        virality_index = views / (subs if subs != 0 else 1)
+
+                        # Apply filters for channels with specified subscriber count and viral videos
+                        if min_subs <= subs <= max_subs and virality_index > 1:  # Assuming virality index greater than 1 is "viral"
+                            channel_age = (datetime.utcnow() - datetime.strptime(channel["snippet"]["publishedAt"], "%Y-%m-%dT%H:%M:%SZ")).days
+                            country = channel["snippet"].get("country", "N/A")  # Country (if available)
+                            niche = channel["snippet"].get("categoryId", "N/A")  # Niche (categoryId)
+
                             all_results.append({
                                 "Channel Name": channel["snippet"]["channelTitle"],
                                 "Channel URL": f"https://www.youtube.com/channel/{channel['id']}",
                                 "Subscribers": subs,
                                 "Age (Days)": channel_age,
                                 "Country": country,
-                                "Niche": channel_category,
+                                "Niche": niche,
+                                "Top Video": title,
+                                "Video URL": video_url,
+                                "Views": views,
                             })
 
             # Display results
             if all_results:
-                st.success(f"Found {len(all_results)} channels matching the selected filters!")
+                st.success(f"Found {len(all_results)} viral channels matching your filters!")
                 for result in all_results:
                     st.markdown(f"### {result['Channel Name']}")
                     st.markdown(f"**Subscribers:** {result['Subscribers']}")
                     st.markdown(f"**Age:** {result['Age (Days)']} days")
                     st.markdown(f"**Country:** {result['Country']}")
                     st.markdown(f"**Niche:** {result['Niche']}")
+                    st.markdown(f"**Top Video:** [{result['Top Video']}]({result['Video URL']}) - Views: {result['Views']}")
                     st.markdown(f"[Visit Channel]({result['Channel URL']})")
                     st.write("---")
             else:
