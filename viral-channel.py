@@ -73,7 +73,7 @@ if st.button("Fetch Data"):
                         video_params = {
                             "part": "snippet,statistics",
                             "channelId": channel_id,
-                            "order": "viewCount",
+                            "order": "viewCount",  # Sorting by view count
                             "maxResults": 5,
                             "key": API_KEY,
                         }
@@ -90,15 +90,14 @@ if st.button("Fetch Data"):
                                 video_url = f"https://www.youtube.com/watch?v={video_id}"
                                 views = int(video["statistics"]["viewCount"])
 
-                                # Only consider videos with a decent amount of views as "viral"
-                                if views > 1000:  # Threshold for viral videos
-                                    video_details.append({
-                                        "Title": title,
-                                        "URL": video_url,
-                                        "Views": views,
-                                    })
+                                # No view threshold, all videos will be considered viral
+                                video_details.append({
+                                    "Title": title,
+                                    "URL": video_url,
+                                    "Views": views,
+                                })
 
-                            # Add to final results if there are viral videos
+                            # Add to final results if there are videos
                             if video_details:
                                 all_results.append({
                                     "Channel Name": channel_name,
@@ -109,12 +108,12 @@ if st.button("Fetch Data"):
 
         # Display results
         if all_results:
-            st.success(f"Found {len(all_results)} potential viral channels!")
+            st.success(f"Found {len(all_results)} newly launched viral channels!")
             for result in all_results:
                 st.markdown(f"### {result['Channel Name']}")
                 st.markdown(f"**Subscribers:** {result['Subscribers']}")
                 st.markdown(f"[Visit Channel]({result['Channel URL']})")
-                st.write("**Top 5 Viral Videos:**")
+                st.write("**Top 5 Videos:**")
                 for video in result["Videos"]:
                     st.markdown(f"- **{video['Title']}**: [Watch Here]({video['URL']}) - Views: {video['Views']}")
                 st.write("---")
