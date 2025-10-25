@@ -71,7 +71,14 @@ if st.button("Fetch Data"):
                     if "items" in channel_data and channel_data["items"]:
                         subs = int(channel_data["items"][0]["statistics"]["subscriberCount"])
                         creation_date = channel_data["items"][0]["snippet"]["publishedAt"]
-                        creation_date = datetime.strptime(creation_date, "%Y-%m-%dT%H:%M:%SZ")
+                        
+                        # Fix for datetime format handling fractional seconds (microseconds)
+                        try:
+                            creation_date = datetime.strptime(creation_date, "%Y-%m-%dT%H:%M:%S.%fZ")
+                        except ValueError:
+                            # If no microseconds, fall back to a regular date format
+                            creation_date = datetime.strptime(creation_date, "%Y-%m-%dT%H:%M:%SZ")
+                        
                         channel_age = (datetime.utcnow() - creation_date).days
 
                         # Filter for channels within the specified subscriber count range
