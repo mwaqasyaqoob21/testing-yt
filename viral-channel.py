@@ -87,13 +87,21 @@ if st.button("Fetch Data"):
                         country = channel["snippet"].get("country", "N/A")  # Country (if available)
                         channel_category = channel["snippet"].get("categoryId", "N/A")  # Niche/Category
 
+                        # Fix for datetime format handling fractional seconds (microseconds)
+                        creation_date = channel["snippet"].get("publishedAt", "1970-01-01T00:00:00Z")
+                        try:
+                            creation_date = datetime.strptime(creation_date, "%Y-%m-%dT%H:%M:%S.%fZ")
+                        except ValueError:
+                            # If no microseconds, fall back to a regular date format
+                            creation_date = datetime.strptime(creation_date, "%Y-%m-%dT%H:%M:%SZ")
+                        
+                        channel_age = (datetime.utcnow() - creation_date).days
+
                         # Calculate virality: views to subscribers ratio
                         virality_index = views / (subs if subs != 0 else 1)
 
                         # Apply filters for channels with specified subscriber count and viral videos
                         if min_subs <= subs <= max_subs and virality_index > 1:  # Assuming virality index greater than 1 is "viral"
-                            channel_age = (datetime.utcnow() - datetime.strptime(channel["snippet"]["publishedAt"], "%Y-%m-%dT%H:%M:%SZ")).days
-
                             all_results.append({
                                 "Channel Name": channel_name,
                                 "Channel URL": f"https://www.youtube.com/channel/{channel['id']}",
