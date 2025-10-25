@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 import re
 from collections import Counter
+import isodate  # For parsing YouTube duration format
 
 # YouTube API Configuration
 API_KEY = "AIzaSyAMSPSOQaPGAia_SxtMzcsL72w-cuSgh9U"
@@ -25,6 +26,35 @@ st.title("🔍 YouTube Channel Research Tool")
 st.markdown("**Discover new YouTube channels based on your custom criteria**")
 
 # ============================================
+# DURATION PARSING FUNCTIONS
+# ============================================
+
+def parse_duration(duration_str):
+    """Parse ISO 8601 duration format to seconds"""
+    try:
+        duration = isodate.parse_duration(duration_str)
+        return int(duration.total_seconds())
+    except:
+        return 0
+
+def format_duration(seconds):
+    """Format seconds to readable duration"""
+    if seconds < 60:
+        return f"{seconds}s"
+    elif seconds < 3600:
+        minutes = seconds // 60
+        secs = seconds % 60
+        return f"{minutes}m {secs}s"
+    else:
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        return f"{hours}h {minutes}m"
+
+def is_short_video(duration_seconds):
+    """Determine if video is a YouTube Short (<=60 seconds)"""
+    return duration_seconds <= 60
+
+# ============================================
 # SIMILARITY DETECTION FUNCTIONS
 # ============================================
 
@@ -34,18 +64,16 @@ def calculate_text_similarity(text1, text2):
 
 def extract_keywords(text, top_n=10):
     """Extract important keywords from text"""
-    # Remove common words
     common_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
                     'of', 'with', 'by', 'from', 'up', 'about', 'into', 'through', 'during',
                     'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
                     'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might',
-                    'i', 'you', 'he', 'she', 'it', 'we', 'they', 'my', 'your', 'his', 'her'}
+                    'i', 'you', 'he', 'she', 'it', 'we', 'they', 'my', 'your', 'his', 'her',
+                    'part', 'update', 'story', 'reddit'}
     
-    # Extract words
     words = re.findall(r'\b[a-z]+\b', text.lower())
     filtered_words = [w for w in words if w not in common_words and len(w) > 3]
     
-    # Get most common
     word_freq = Counter(filtered_words)
     return [word for word, _ in word_freq.most_common(top_n)]
 
@@ -69,13 +97,11 @@ def find_similar_videos(target_video, all_videos, threshold=0.3):
         if video['video_url'] == target_video['video_url']:
             continue
         
-        # Calculate multiple similarity scores
         title_sim = calculate_text_similarity(target_title, video['video_title'])
         
         video_keywords = extract_keywords(video['video_title'] + ' ' + video.get('description', ''))
         keyword_sim = calculate_keyword_overlap(target_keywords, video_keywords)
         
-        # Combined similarity score
         similarity_score = (title_sim * 0.6) + (keyword_sim * 0.4)
         
         if similarity_score >= threshold:
@@ -86,7 +112,6 @@ def find_similar_videos(target_video, all_videos, threshold=0.3):
                 'keyword_similarity': keyword_sim
             })
     
-    # Sort by similarity score
     similar.sort(key=lambda x: x['similarity_score'], reverse=True)
     return similar
 
@@ -99,16 +124,13 @@ def group_similar_content(all_videos, threshold=0.35):
         if i in processed:
             continue
         
-        # Start a new cluster
         cluster = [video]
         processed.add(i)
         
-        # Find similar videos
         for j, other_video in enumerate(all_videos):
             if j in processed or i == j:
                 continue
             
-            # Calculate similarity
             title_sim = calculate_text_similarity(video['video_title'], other_video['video_title'])
             
             video_keywords = extract_keywords(video['video_title'])
@@ -123,7 +145,6 @@ def group_similar_content(all_videos, threshold=0.35):
         
         clusters.append(cluster)
     
-    # Sort clusters by size (largest first)
     clusters.sort(key=len, reverse=True)
     return clusters
 
@@ -135,7 +156,6 @@ def detect_trending_topics(all_videos, min_occurrence=2):
         keywords = extract_keywords(video['video_title'])
         all_keywords.extend(keywords)
     
-    # Count keyword frequency
     keyword_freq = Counter(all_keywords)
     trending = [(word, count) for word, count in keyword_freq.most_common(20) 
                 if count >= min_occurrence]
@@ -147,7 +167,7 @@ def detect_trending_topics(all_videos, min_occurrence=2):
 # ============================================
 st.sidebar.header("⚙️ Search Configuration")
 
-# 1. KEYWORD INPUT (User-Defined)
+# 1. KEYWORD INPUT
 st.sidebar.subheader("1️⃣ Keywords")
 keywords_input = st.sidebar.text_area(
     "Enter Keywords (one per line):",
@@ -157,8 +177,16 @@ keywords_input = st.sidebar.text_area(
 )
 keywords = [k.strip() for k in keywords_input.split('\n') if k.strip()]
 
-# 2. TIME RANGE FILTER (User-Defined)
-st.sidebar.subheader("2️⃣ Video Upload Time")
+# 2. VIDEO TYPE FILTER
+st.sidebar.subheader("2️⃣ Video Type")
+video_type_filter = st.sidebar.radio(
+    "Show:",
+    ["All Videos", "Shorts Only (≤60s)", "Regular Videos Only (>60s)"],
+    help="Filter results by video duration"
+)
+
+# 3. TIME RANGE FILTER
+st.sidebar.subheader("3️⃣ Video Upload Time")
 time_range = st.sidebar.selectbox(
     "Videos uploaded within:",
     ["Last 24 Hours", "Last 7 Days", "Last 30 Days", "Last 3 Months", 
@@ -169,8 +197,8 @@ custom_days = None
 if time_range == "Custom Days":
     custom_days = st.sidebar.number_input("Enter Days:", min_value=1, max_value=365, value=30)
 
-# 3. SUBSCRIBER COUNT FILTER (User-Defined Range)
-st.sidebar.subheader("3️⃣ Channel Subscribers")
+# 4. SUBSCRIBER COUNT FILTER
+st.sidebar.subheader("4️⃣ Channel Subscribers")
 enable_sub_filter = st.sidebar.checkbox("Enable Subscriber Filter", value=True)
 
 if enable_sub_filter:
@@ -182,8 +210,8 @@ if enable_sub_filter:
 else:
     min_subs, max_subs = 0, float('inf')
 
-# 4. CHANNEL AGE FILTER (User-Defined)
-st.sidebar.subheader("4️⃣ Channel Age")
+# 5. CHANNEL AGE FILTER
+st.sidebar.subheader("5️⃣ Channel Age")
 enable_age_filter = st.sidebar.checkbox("Enable Channel Age Filter", value=True)
 
 if enable_age_filter:
@@ -204,12 +232,12 @@ if enable_age_filter:
 else:
     age_range = None
 
-# 5. RESULTS PER KEYWORD
-st.sidebar.subheader("5️⃣ Results")
+# 6. RESULTS PER KEYWORD
+st.sidebar.subheader("6️⃣ Results")
 max_results = st.sidebar.slider("Max results per keyword:", 1, 50, 10)
 
-# 6. SIMILARITY DETECTION
-st.sidebar.subheader("6️⃣ Similarity Analysis")
+# 7. SIMILARITY DETECTION
+st.sidebar.subheader("7️⃣ Similarity Analysis")
 enable_similarity = st.sidebar.checkbox("Enable Similarity Detection", value=True, 
                                         help="Find and group similar content")
 if enable_similarity:
@@ -294,7 +322,6 @@ def perform_search(keywords, published_after, channel_age_cutoff, enable_age_fil
     progress = st.progress(0)
     status = st.empty()
     
-    # Search each keyword
     total = len(keywords)
     for idx, keyword in enumerate(keywords):
         status.text(f"🔎 Searching: {keyword} ({idx+1}/{total})")
@@ -314,7 +341,6 @@ def perform_search(keywords, published_after, channel_age_cutoff, enable_age_fil
         response = requests.get(YOUTUBE_SEARCH_URL, params=search_params)
         data = response.json()
         
-        # Check for errors
         if "error" in data:
             st.error(f"API Error: {data['error']['message']}")
             continue
@@ -329,14 +355,14 @@ def perform_search(keywords, published_after, channel_age_cutoff, enable_age_fil
         if not video_ids or not channel_ids:
             continue
         
-        # Fetch Video Statistics
+        # Fetch Video Statistics AND Duration (contentDetails)
         stats_response = requests.get(
             YOUTUBE_VIDEO_URL,
-            params={"part": "statistics,snippet", "id": ",".join(video_ids), "key": API_KEY}
+            params={"part": "statistics,snippet,contentDetails", "id": ",".join(video_ids), "key": API_KEY}
         )
         stats_data = stats_response.json()
         
-        # Fetch Channel Information (with creation date)
+        # Fetch Channel Information
         channel_response = requests.get(
             YOUTUBE_CHANNEL_URL,
             params={"part": "statistics,snippet", "id": ",".join(channel_ids), "key": API_KEY}
@@ -346,7 +372,7 @@ def perform_search(keywords, published_after, channel_age_cutoff, enable_age_fil
         if "items" not in stats_data or "items" not in channel_data:
             continue
         
-        # Build lookup dictionaries
+        # Build channel lookup
         channel_info = {}
         for ch in channel_data["items"]:
             ch_id = ch["id"]
@@ -362,14 +388,21 @@ def perform_search(keywords, published_after, channel_age_cutoff, enable_age_fil
                 "created_dt": created_dt
             }
         
+        # Build video stats lookup with DURATION
         video_stats = {}
         for v in stats_data["items"]:
+            duration_iso = v.get("contentDetails", {}).get("duration", "PT0S")
+            duration_seconds = parse_duration(duration_iso)
+            
             video_stats[v["id"]] = {
                 "views": int(v["statistics"].get("viewCount", 0)),
                 "likes": int(v["statistics"].get("likeCount", 0)),
                 "comments": int(v["statistics"].get("commentCount", 0)),
                 "description": v["snippet"].get("description", "")[:300],
-                "tags": v["snippet"].get("tags", [])
+                "tags": v["snippet"].get("tags", []),
+                "duration_seconds": duration_seconds,
+                "duration_formatted": format_duration(duration_seconds),
+                "is_short": is_short_video(duration_seconds)
             }
         
         # Process and filter results
@@ -404,12 +437,14 @@ def perform_search(keywords, published_after, channel_age_cutoff, enable_age_fil
                 "comments": video_stats[vid_id]["comments"],
                 "description": video_stats[vid_id]["description"],
                 "tags": video_stats[vid_id]["tags"],
+                "duration_seconds": video_stats[vid_id]["duration_seconds"],
+                "duration_formatted": video_stats[vid_id]["duration_formatted"],
+                "is_short": video_stats[vid_id]["is_short"],
                 "subscribers": ch["subscribers"],
                 "channel_age_days": ch["age_days"] if ch["age_days"] else "N/A",
                 "published": video["snippet"].get("publishedAt", "N/A")[:10]
             })
     
-    # Clear progress
     progress.empty()
     status.empty()
     
@@ -427,11 +462,9 @@ if search_btn:
         st.error("❌ Please add your YouTube API Key!")
     else:
         try:
-            # Calculate date filters
             published_after = get_published_after_date(time_range, custom_days)
             channel_age_cutoff = get_channel_age_cutoff(age_range, custom_age_days) if enable_age_filter else None
             
-            # Perform search and store in session state
             st.session_state.search_results = perform_search(
                 keywords, published_after, channel_age_cutoff, enable_age_filter,
                 enable_sub_filter, min_subs, max_subs, max_results, API_KEY
@@ -447,195 +480,350 @@ if search_btn:
 if st.session_state.search_completed and st.session_state.search_results:
     all_results = st.session_state.search_results
     
-    st.success(f"✅ Found **{len(all_results)}** videos from **{len(set([r['channel_name'] for r in all_results]))}** unique channels!")
+    # Filter by video type
+    if video_type_filter == "Shorts Only (≤60s)":
+        filtered_results = [r for r in all_results if r['is_short']]
+        filter_emoji = "📱"
+    elif video_type_filter == "Regular Videos Only (>60s)":
+        filtered_results = [r for r in all_results if not r['is_short']]
+        filter_emoji = "🎬"
+    else:
+        filtered_results = all_results
+        filter_emoji = "🎥"
     
-    # Summary Stats
+    # Separate shorts and regular videos for stats
+    shorts = [r for r in all_results if r['is_short']]
+    regular_videos = [r for r in all_results if not r['is_short']]
+    
+    st.success(f"{filter_emoji} Found **{len(filtered_results)}** videos from **{len(set([r['channel_name'] for r in filtered_results]))}** unique channels!")
+    
+    # Summary Stats with Shorts/Regular breakdown
     st.subheader("📊 Summary Statistics")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     col1.metric("Total Videos", len(all_results))
-    col2.metric("Unique Channels", len(set([r['channel_name'] for r in all_results])))
-    col3.metric("Total Views", f"{sum([r['views'] for r in all_results]):,}")
-    col4.metric("Avg Subscribers", f"{int(sum([r['subscribers'] for r in all_results])/len(all_results)):,}")
+    col2.metric("📱 Shorts", len(shorts), delta=f"{len(shorts)/max(len(all_results),1)*100:.0f}%")
+    col3.metric("🎬 Regular", len(regular_videos), delta=f"{len(regular_videos)/max(len(all_results),1)*100:.0f}%")
+    col4.metric("Unique Channels", len(set([r['channel_name'] for r in all_results])))
+    col5.metric("Total Views", f"{sum([r['views'] for r in all_results]):,}")
     
     # ============================================
-    # SIMILARITY ANALYSIS SECTION
+    # TABS: Shorts vs Regular Videos
     # ============================================
-    if st.session_state.similarity_analysis and enable_similarity:
-        st.markdown("---")
-        st.header("🔗 Similarity Analysis")
-        
-        tab1, tab2, tab3 = st.tabs(["📊 Trending Topics", "🎯 Content Clusters", "🔍 Find Similar"])
-        
-        # TAB 1: Trending Topics
-        with tab1:
-            st.subheader("🔥 Trending Topics Across Results")
-            trending = detect_trending_topics(all_results, min_occurrence=2)
+    
+    main_tab1, main_tab2, main_tab3, main_tab4 = st.tabs([
+        f"📱 Shorts ({len(shorts)})", 
+        f"🎬 Regular Videos ({len(regular_videos)})",
+        "🔗 Similarity Analysis",
+        "📥 Export Data"
+    ])
+    
+    # ============================================
+    # TAB 1: SHORTS VIDEOS
+    # ============================================
+    with main_tab1:
+        if shorts:
+            st.subheader(f"📱 YouTube Shorts (≤60 seconds) - {len(shorts)} results")
             
-            if trending:
-                cols = st.columns(4)
-                for idx, (topic, count) in enumerate(trending[:12]):
-                    with cols[idx % 4]:
-                        st.metric(topic.title(), f"{count} videos", delta=None)
-            else:
-                st.info("No trending topics detected")
-        
-        # TAB 2: Content Clusters
-        with tab2:
-            st.subheader("🎯 Similar Content Groups")
-            clusters = group_similar_content(all_results, threshold=similarity_threshold)
+            # Shorts-specific stats
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Views", f"{sum([r['views'] for r in shorts]):,}")
+            col2.metric("Avg Views/Short", f"{int(sum([r['views'] for r in shorts])/len(shorts)):,}")
+            col3.metric("Unique Channels", len(set([r['channel_name'] for r in shorts])))
             
-            # Only show clusters with more than 1 video
-            significant_clusters = [c for c in clusters if len(c) > 1]
-            
-            if significant_clusters:
-                st.write(f"Found **{len(significant_clusters)}** groups of similar content:")
-                
-                for i, cluster in enumerate(significant_clusters[:10], 1):  # Show top 10 clusters
-                    with st.expander(f"📁 Cluster {i} - {len(cluster)} similar videos"):
-                        for video in cluster:
-                            st.markdown(f"- [{video['video_title']}]({video['video_url']}) | "
-                                      f"👁️ {video['views']:,} | 👥 {video['subscribers']:,} subs")
-            else:
-                st.info("No significant content clusters found. Try lowering the similarity threshold.")
-        
-        # TAB 3: Find Similar
-        with tab3:
-            st.subheader("🔍 Find Similar Videos")
-            
-            # Create a searchable list
-            video_options = [f"{r['video_title'][:60]}... ({r['views']:,} views)" 
-                           for r in all_results]
-            
-            selected_video_idx = st.selectbox(
-                "Select a video to find similar content:",
-                range(len(all_results)),
-                format_func=lambda x: video_options[x]
+            # Sort options for shorts
+            sort_shorts = st.selectbox(
+                "Sort Shorts by:",
+                ["Views (High to Low)", "Subscribers (Low to High)", 
+                 "Published Date (Recent)", "Engagement Rate (High to Low)"],
+                key="sort_shorts"
             )
             
-            if st.button("Find Similar Videos"):
-                target = all_results[selected_video_idx]
-                similar = find_similar_videos(target, all_results, threshold=similarity_threshold)
-                
-                if similar:
-                    st.success(f"Found {len(similar)} similar videos:")
+            sorted_shorts = shorts.copy()
+            
+            if "Views (High" in sort_shorts:
+                sorted_shorts.sort(key=lambda x: x["views"], reverse=True)
+            elif "Subscribers (Low" in sort_shorts:
+                sorted_shorts.sort(key=lambda x: x["subscribers"])
+            elif "Engagement Rate" in sort_shorts:
+                sorted_shorts.sort(key=lambda x: (x["likes"] + x["comments"]) / max(x["views"], 1), reverse=True)
+            else:
+                sorted_shorts.sort(key=lambda x: x["published"], reverse=True)
+            
+            # Display shorts
+            for i, r in enumerate(sorted_shorts, 1):
+                with st.expander(f"#{i} - {r['video_title'][:60]}... | ⏱️ {r['duration_formatted']}"):
+                    col1, col2 = st.columns([2, 1])
                     
-                    for sim in similar[:10]:  # Show top 10
-                        v = sim['video']
-                        score = sim['similarity_score']
+                    with col1:
+                        st.markdown(f"**🎥 Video:** [{r['video_title']}]({r['video_url']})")
+                        st.markdown(f"**📺 Channel:** [{r['channel_name']}]({r['channel_url']})")
+                        st.markdown(f"**🔑 Keyword:** {r['keyword']}")
+                        st.markdown(f"**📅 Published:** {r['published']} | ⏱️ Duration: **{r['duration_formatted']}**")
                         
-                        with st.container():
-                            col1, col2 = st.columns([3, 1])
-                            with col1:
-                                st.markdown(f"**[{v['video_title']}]({v['video_url']})**")
-                                st.caption(f"Channel: {v['channel_name']} | {v['views']:,} views")
-                            with col2:
-                                st.metric("Match", f"{score*100:.0f}%")
-                            st.markdown("---")
-                else:
-                    st.warning("No similar videos found. Try lowering the similarity threshold.")
+                        if r.get('description'):
+                            st.caption(f"📝 {r['description'][:120]}...")
+                    
+                    with col2:
+                        st.metric("👁️ Views", f"{r['views']:,}")
+                        st.metric("👍 Likes", f"{r['likes']:,}")
+                        st.metric("💬 Comments", f"{r['comments']:,}")
+                        engagement = (r['likes'] + r['comments']) / max(r['views'], 1) * 100
+                        st.metric("📈 Engagement", f"{engagement:.2f}%")
+                        st.metric("👥 Subs", f"{r['subscribers']:,}")
+        else:
+            st.info("No YouTube Shorts found in results")
     
     # ============================================
-    # STANDARD RESULTS DISPLAY
+    # TAB 2: REGULAR VIDEOS
     # ============================================
-    st.markdown("---")
-    st.subheader("📋 All Results")
-    
-    # Sort Options
-    sort_option = st.selectbox(
-        "Sort by:",
-        ["Views (High to Low)", "Subscribers (Low to High)", 
-         "Channel Age (Newest)", "Published Date (Recent)",
-         "Engagement Rate (High to Low)"]
-    )
-    
-    # Create a copy for sorting
-    sorted_results = all_results.copy()
-    
-    if "Views (High" in sort_option:
-        sorted_results.sort(key=lambda x: x["views"], reverse=True)
-    elif "Subscribers (Low" in sort_option:
-        sorted_results.sort(key=lambda x: x["subscribers"])
-    elif "Channel Age" in sort_option:
-        sorted_results.sort(key=lambda x: x["channel_age_days"] if isinstance(x["channel_age_days"], int) else 999999)
-    elif "Engagement Rate" in sort_option:
-        # Calculate engagement rate (likes + comments / views)
-        sorted_results.sort(key=lambda x: (x["likes"] + x["comments"]) / max(x["views"], 1), reverse=True)
-    else:
-        sorted_results.sort(key=lambda x: x["published"], reverse=True)
-    
-    # Display Results
-    for i, r in enumerate(sorted_results, 1):
-        with st.expander(f"#{i} - {r['video_title'][:70]}..."):
-            col1, col2 = st.columns([2, 1])
+    with main_tab2:
+        if regular_videos:
+            st.subheader(f"🎬 Regular Videos (>60 seconds) - {len(regular_videos)} results")
             
-            with col1:
-                st.markdown(f"**🎥 Video:** [{r['video_title']}]({r['video_url']})")
-                st.markdown(f"**📺 Channel:** [{r['channel_name']}]({r['channel_url']})")
-                st.markdown(f"**🔑 Keyword:** {r['keyword']}")
-                st.markdown(f"**📅 Published:** {r['published']}")
-                
-                if r.get('description'):
-                    st.caption(f"📝 {r['description'][:150]}...")
-                
-                if r.get('tags'):
-                    tags_str = ", ".join(r['tags'][:5])
-                    st.caption(f"🏷️ Tags: {tags_str}")
+            # Regular videos stats
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Total Views", f"{sum([r['views'] for r in regular_videos]):,}")
+            col2.metric("Avg Views/Video", f"{int(sum([r['views'] for r in regular_videos])/len(regular_videos)):,}")
+            col3.metric("Avg Duration", format_duration(int(sum([r['duration_seconds'] for r in regular_videos])/len(regular_videos))))
+            col4.metric("Unique Channels", len(set([r['channel_name'] for r in regular_videos])))
             
-            with col2:
-                st.metric("👁️ Views", f"{r['views']:,}")
-                st.metric("👍 Likes", f"{r['likes']:,}")
-                st.metric("💬 Comments", f"{r['comments']:,}")
-                engagement = (r['likes'] + r['comments']) / max(r['views'], 1) * 100
-                st.metric("📈 Engagement", f"{engagement:.2f}%")
-                st.metric("👥 Subscribers", f"{r['subscribers']:,}")
-                st.metric("⏱️ Channel Age", 
-                         f"{r['channel_age_days']} days" if isinstance(r['channel_age_days'], int) else "N/A")
+            # Sort options for regular videos
+            sort_regular = st.selectbox(
+                "Sort Regular Videos by:",
+                ["Views (High to Low)", "Subscribers (Low to High)", 
+                 "Duration (Longest)", "Published Date (Recent)", 
+                 "Engagement Rate (High to Low)"],
+                key="sort_regular"
+            )
+            
+            sorted_regular = regular_videos.copy()
+            
+            if "Views (High" in sort_regular:
+                sorted_regular.sort(key=lambda x: x["views"], reverse=True)
+            elif "Subscribers (Low" in sort_regular:
+                sorted_regular.sort(key=lambda x: x["subscribers"])
+            elif "Duration" in sort_regular:
+                sorted_regular.sort(key=lambda x: x["duration_seconds"], reverse=True)
+            elif "Engagement Rate" in sort_regular:
+                sorted_regular.sort(key=lambda x: (x["likes"] + x["comments"]) / max(x["views"], 1), reverse=True)
+            else:
+                sorted_regular.sort(key=lambda x: x["published"], reverse=True)
+            
+            # Display regular videos
+            for i, r in enumerate(sorted_regular, 1):
+                with st.expander(f"#{i} - {r['video_title'][:60]}... | ⏱️ {r['duration_formatted']}"):
+                    col1, col2 = st.columns([2, 1])
+                    
+                    with col1:
+                        st.markdown(f"**🎥 Video:** [{r['video_title']}]({r['video_url']})")
+                        st.markdown(f"**📺 Channel:** [{r['channel_name']}]({r['channel_url']})")
+                        st.markdown(f"**🔑 Keyword:** {r['keyword']}")
+                        st.markdown(f"**📅 Published:** {r['published']} | ⏱️ Duration: **{r['duration_formatted']}**")
+                        
+                        if r.get('description'):
+                            st.caption(f"📝 {r['description'][:150]}...")
+                        
+                        if r.get('tags'):
+                            tags_str = ", ".join(r['tags'][:5])
+                            st.caption(f"🏷️ Tags: {tags_str}")
+                    
+                    with col2:
+                        st.metric("👁️ Views", f"{r['views']:,}")
+                        st.metric("👍 Likes", f"{r['likes']:,}")
+                        st.metric("💬 Comments", f"{r['comments']:,}")
+                        engagement = (r['likes'] + r['comments']) / max(r['views'], 1) * 100
+                        st.metric("📈 Engagement", f"{engagement:.2f}%")
+                        st.metric("👥 Subscribers", f"{r['subscribers']:,}")
+                        st.metric("⏱️ Channel Age", 
+                                 f"{r['channel_age_days']} days" if isinstance(r['channel_age_days'], int) else "N/A")
+        else:
+            st.info("No regular videos found in results")
     
     # ============================================
-    # EXPORT SECTION
+    # TAB 3: SIMILARITY ANALYSIS
     # ============================================
-    st.markdown("---")
-    st.subheader("📥 Export Data")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Export All Results
-        import io
-        csv = io.StringIO()
-        csv.write("Keyword,Video Title,Channel Name,Subscribers,Views,Likes,Comments,Engagement Rate,Channel Age (Days),Published Date,Video URL,Channel URL\n")
-        for r in sorted_results:
-            video_title = r['video_title'].replace(',', ';').replace('\n', ' ')
-            channel_name = r['channel_name'].replace(',', ';')
-            engagement = (r['likes'] + r['comments']) / max(r['views'], 1) * 100
-            csv.write(f"{r['keyword']},{video_title},{channel_name},{r['subscribers']},{r['views']},{r['likes']},{r['comments']},{engagement:.2f}%,{r['channel_age_days']},{r['published']},{r['video_url']},{r['channel_url']}\n")
-        
-        st.download_button(
-            "📥 Download All Results (CSV)",
-            data=csv.getvalue(),
-            file_name=f"youtube_research_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv"
-        )
-    
-    with col2:
-        # Export Similarity Analysis
+    with main_tab3:
         if st.session_state.similarity_analysis and enable_similarity:
-            clusters = group_similar_content(all_results, threshold=similarity_threshold)
-            cluster_csv = io.StringIO()
-            cluster_csv.write("Cluster ID,Video Title,Views,Subscribers,Video URL\n")
+            st.header("🔗 Similarity Analysis")
             
-            for i, cluster in enumerate(clusters, 1):
-                for video in cluster:
-                    title = video['video_title'].replace(',', ';').replace('\n', ' ')
-                    cluster_csv.write(f"{i},{title},{video['views']},{video['subscribers']},{video['video_url']}\n")
+            analysis_tab1, analysis_tab2, analysis_tab3 = st.tabs([
+                "📊 Trending Topics", 
+                "🎯 Content Clusters", 
+                "🔍 Find Similar"
+            ])
+            
+            # Trending Topics
+            with analysis_tab1:
+                st.subheader("🔥 Trending Topics Across Results")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write("**📱 Shorts Topics:**")
+                    if shorts:
+                        trending_shorts = detect_trending_topics(shorts, min_occurrence=2)
+                        if trending_shorts:
+                            for topic, count in trending_shorts[:8]:
+                                st.metric(topic.title(), f"{count} videos")
+                        else:
+                            st.info("Not enough data")
+                    else:
+                        st.info("No shorts found")
+                
+                with col2:
+                    st.write("**🎬 Regular Videos Topics:**")
+                    if regular_videos:
+                        trending_regular = detect_trending_topics(regular_videos, min_occurrence=2)
+                        if trending_regular:
+                            for topic, count in trending_regular[:8]:
+                                st.metric(topic.title(), f"{count} videos")
+                        else:
+                            st.info("Not enough data")
+                    else:
+                        st.info("No regular videos found")
+            
+            # Content Clusters
+            with analysis_tab2:
+                st.subheader("🎯 Similar Content Groups")
+                
+                cluster_type = st.radio(
+                    "Analyze:",
+                    ["All Videos", "Shorts Only", "Regular Videos Only"]
+                )
+                
+                if cluster_type == "Shorts Only":
+                    cluster_data = shorts
+                elif cluster_type == "Regular Videos Only":
+                    cluster_data = regular_videos
+                else:
+                    cluster_data = filtered_results
+                
+                if cluster_data:
+                    clusters = group_similar_content(cluster_data, threshold=similarity_threshold)
+                    significant_clusters = [c for c in clusters if len(c) > 1]
+                    
+                    if significant_clusters:
+                        st.write(f"Found **{len(significant_clusters)}** groups of similar content:")
+                        
+                        for i, cluster in enumerate(significant_clusters[:10], 1):
+                            with st.expander(f"📁 Cluster {i} - {len(cluster)} similar videos"):
+                                for video in cluster:
+                                    duration_badge = "📱" if video['is_short'] else "🎬"
+                                    st.markdown(f"{duration_badge} [{video['video_title']}]({video['video_url']}) | "
+                                              f"⏱️ {video['duration_formatted']} | "
+                                              f"👁️ {video['views']:,} | "
+                                              f"👥 {video['subscribers']:,} subs")
+                    else:
+                        st.info("No significant content clusters found. Try lowering the similarity threshold.")
+                else:
+                    st.info("No videos to analyze")
+            
+            # Find Similar
+            with analysis_tab3:
+                st.subheader("🔍 Find Similar Videos")
+                
+                if filtered_results:
+                    video_options = [f"{r['video_title'][:50]}... ({r['duration_formatted']}) - {r['views']:,} views" 
+                                   for r in filtered_results]
+                    
+                    selected_video_idx = st.selectbox(
+                        "Select a video to find similar content:",
+                        range(len(filtered_results)),
+                        format_func=lambda x: video_options[x]
+                    )
+                    
+                    if st.button("Find Similar Videos"):
+                        target = filtered_results[selected_video_idx]
+                        similar = find_similar_videos(target, filtered_results, threshold=similarity_threshold)
+                        
+                        if similar:
+                            st.success(f"Found {len(similar)} similar videos:")
+                            
+                            for sim in similar[:10]:
+                                v = sim['video']
+                                score = sim['similarity_score']
+                                duration_badge = "📱" if v['is_short'] else "🎬"
+                                
+                                with st.container():
+                                    col1, col2 = st.columns([3, 1])
+                                    with col1:
+                                        st.markdown(f"{duration_badge} **[{v['video_title']}]({v['video_url']})**")
+                                        st.caption(f"Channel: {v['channel_name']} | ⏱️ {v['duration_formatted']} | {v['views']:,} views")
+                                    with col2:
+                                        st.metric("Match", f"{score*100:.0f}%")
+                                    st.markdown("---")
+                        else:
+                            st.warning("No similar videos found. Try lowering the similarity threshold.")
+                else:
+                    st.info("No videos available for analysis")
+        else:
+            st.info("Enable Similarity Detection in the sidebar to use this feature")
+    
+    # ============================================
+    # TAB 4: EXPORT DATA
+    # ============================================
+    with main_tab4:
+        st.subheader("📥 Export Data")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        # Export All Results
+        with col1:
+            import io
+            csv_all = io.StringIO()
+            csv_all.write("Video Type,Keyword,Video Title,Channel Name,Duration,Subscribers,Views,Likes,Comments,Engagement Rate,Channel Age (Days),Published Date,Video URL,Channel URL\n")
+            for r in all_results:
+                video_type = "Short" if r['is_short'] else "Regular"
+                video_title = r['video_title'].replace(',', ';').replace('\n', ' ')
+                channel_name = r['channel_name'].replace(',', ';')
+                engagement = (r['likes'] + r['comments']) / max(r['views'], 1) * 100
+                csv_all.write(f"{video_type},{r['keyword']},{video_title},{channel_name},{r['duration_formatted']},{r['subscribers']},{r['views']},{r['likes']},{r['comments']},{engagement:.2f}%,{r['channel_age_days']},{r['published']},{r['video_url']},{r['channel_url']}\n")
             
             st.download_button(
-                "📥 Download Clusters (CSV)",
-                data=cluster_csv.getvalue(),
-                file_name=f"youtube_clusters_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                "📥 Download All Results",
+                data=csv_all.getvalue(),
+                file_name=f"youtube_all_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv"
             )
+        
+        # Export Shorts Only
+        with col2:
+            if shorts:
+                csv_shorts = io.StringIO()
+                csv_shorts.write("Keyword,Video Title,Channel Name,Duration,Subscribers,Views,Likes,Comments,Video URL\n")
+                for r in shorts:
+                    video_title = r['video_title'].replace(',', ';').replace('\n', ' ')
+                    channel_name = r['channel_name'].replace(',', ';')
+                    csv_shorts.write(f"{r['keyword']},{video_title},{channel_name},{r['duration_formatted']},{r['subscribers']},{r['views']},{r['likes']},{r['comments']},{r['video_url']}\n")
+                
+                st.download_button(
+                    "📱 Download Shorts Only",
+                    data=csv_shorts.getvalue(),
+                    file_name=f"youtube_shorts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("No shorts to export")
+        
+        # Export Regular Videos Only
+        with col3:
+            if regular_videos:
+                csv_regular = io.StringIO()
+                csv_regular.write("Keyword,Video Title,Channel Name,Duration,Subscribers,Views,Likes,Comments,Video URL\n")
+                for r in regular_videos:
+                    video_title = r['video_title'].replace(',', ';').replace('\n', ' ')
+                    channel_name = r['channel_name'].replace(',', ';')
+                    csv_regular.write(f"{r['keyword']},{video_title},{channel_name},{r['duration_formatted']},{r['subscribers']},{r['views']},{r['likes']},{r['comments']},{r['video_url']}\n")
+                
+                st.download_button(
+                    "🎬 Download Regular Videos",
+                    data=csv_regular.getvalue(),
+                    file_name=f"youtube_regular_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("No regular videos to export")
 
 elif st.session_state.search_completed and not st.session_state.search_results:
     st.warning("⚠️ No results found. Try adjusting your filters.")
@@ -649,6 +837,7 @@ else:
     
     with col1:
         st.write(f"**Keywords:** {len(keywords)}")
+        st.write(f"**Video Type:** {video_type_filter}")
         st.write(f"**Time Range:** {time_range}")
     
     with col2:
@@ -665,4 +854,4 @@ else:
 
 # Footer
 st.sidebar.markdown("---")
-st.sidebar.info("💡 **Tip:** Enable Similarity Detection to find content clusters and trending topics!")
+st.sidebar.info("💡 **Tip:** Use video type filter to focus on Shorts or Regular videos separately!")
