@@ -72,19 +72,18 @@ if st.button("Fetch Data"):
                         views = int(stat["statistics"].get("viewCount", 0))
                         subs = int(channel["statistics"].get("subscriberCount", 0))
 
-                        # Filter channels with 1k-5k subscribers
-                        if 1000 <= subs <= 5000:
-                            all_results.append({
-                                "Title": title,
-                                "Description": description,
-                                "URL": video_url,
-                                "Views": views,
-                                "Subscribers": subs,
-                            })
+                        # No filter on subscribers (or broaden the range if needed)
+                        all_results.append({
+                            "Title": title,
+                            "Description": description,
+                            "URL": video_url,
+                            "Views": views,
+                            "Subscribers": subs,
+                        })
 
             # Display results
             if all_results:
-                st.success(f"Found {len(all_results)} viral videos across all keywords!")
+                st.success(f"Found {len(all_results)} viral videos across all topics!")
                 for result in all_results:
                     st.markdown(f"**Title:** {result['Title']}  \n"
                                 f"**Description:** {result['Description']}  \n"
@@ -93,7 +92,7 @@ if st.button("Fetch Data"):
                                 f"**Subscribers:** {result['Subscribers']}")
                     st.write("---")
             else:
-                st.warning("No results found for channels with 1k-5k subscribers and the given filters.")
+                st.warning("No results found for the given filters.")
 
         except Exception as e:
             st.error(f"An error occurred: {e}")
