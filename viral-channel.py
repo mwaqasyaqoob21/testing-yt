@@ -90,12 +90,32 @@ if st.button("Fetch Data"):
 
                 # Filter channels by subscriber count range
                 if min_subscribers <= subs <= max_subscribers:
+                    # Fetch related videos
+                    related_keywords = []
+                    related_video_params = {
+                        "part": "snippet",
+                        "relatedToVideoId": video["id"]["videoId"],
+                        "type": "video",
+                        "maxResults": 5,
+                        "key": API_KEY,
+                    }
+
+                    related_response = requests.get(YOUTUBE_SEARCH_URL, params=related_video_params)
+                    related_data = related_response.json()
+
+                    if "items" in related_data and related_data["items"]:
+                        for related_video in related_data["items"]:
+                            related_title = related_video["snippet"].get("title", "")
+                            related_description = related_video["snippet"].get("description", "")
+                            related_keywords.append(f"Related: {related_title} - {related_description[:100]}...")
+
                     all_results.append({
                         "Title": title,
                         "Description": description,
                         "URL": video_url,
                         "Views": views,
-                        "Subscribers": subs
+                        "Subscribers": subs,
+                        "Related Keywords": related_keywords,
                     })
 
         # Display results
@@ -107,7 +127,8 @@ if st.button("Fetch Data"):
                     f"**Description:** {result['Description']}  \n"
                     f"**URL:** [Watch Video]({result['URL']})  \n"
                     f"**Views:** {result['Views']}  \n"
-                    f"**Subscribers:** {result['Subscribers']}"
+                    f"**Subscribers:** {result['Subscribers']}  \n"
+                    f"**Related Keywords:** {', '.join(result['Related Keywords']) if result['Related Keywords'] else 'No related keywords found.'}"
                 )
                 st.write("---")
         else:
